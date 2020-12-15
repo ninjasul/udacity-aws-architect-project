@@ -4,6 +4,12 @@ provider "aws" {
   alias   = "region-lambda"
 }
 
+data "archive_file" "greeting" {
+  type        = "zip"
+  source_file = "lambda.py"
+  output_path = var.output_path
+}
+
 resource "aws_vpc" "vpc_lambda" {
   provider             = aws.region-lambda
   cidr_block           = "10.0.0.0/16"
@@ -12,6 +18,11 @@ resource "aws_vpc" "vpc_lambda" {
   tags = {
     Name = "vpc-lambda"
   }
+}
+
+resource "aws_internet_gateway" "igw" {
+  provider = aws.region-lambda
+  vpc_id   = aws_vpc.vpc_lambda.id
 }
 
 data "aws_availability_zones" "azs" {
@@ -29,20 +40,12 @@ resource "aws_subnet" "lambda_subnet" {
 resource "aws_security_group" "lambda-sg" {
   provider    = aws.region-lambda
   name        = "lambda-sg"
-  description = "Allow 443 and traffic to Lambda SG"
+  description = "Allow all traffic to Lambda SG"
   vpc_id      = aws_vpc.vpc_lambda.id
   ingress {
-    description = "Allow 443 from anywhere"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  ingress {
-    description = "Allow 80 from anywhere for redirection"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
   egress {
@@ -53,6 +56,25 @@ resource "aws_security_group" "lambda-sg" {
   }
 }
 
+resource "aws_route_table" "lambda_route_table" {
+  provider = aws.region-lambda
+  vpc_id   = aws_vpc.vpc_lambda.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+
+  tags = {
+    Name = "Lambda-RT"
+  }
+}
+
+resource "aws_main_route_table_association" "set-lambda-default-rt-assoc" {
+  provider       = aws.region-lambda
+  vpc_id         = aws_vpc.vpc_lambda.id
+  route_table_id = aws_route_table.lambda_route_table.id
+}
 
 resource "aws_iam_role" "greeting_role" {
   name               = "greeting_role"
@@ -73,30 +95,12 @@ resource "aws_iam_role" "greeting_role" {
 EOF
 }
 
-resource "aws_iam_role_policy" "greeting_policy" {
-  name   = "greeting_policy"
-  role   = aws_iam_role.greeting_role.id
-  policy = <<-EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "Stmt1607923244463",
-      "Action": "logs:*",
-      "Effect": "Allow",
-      "Resource": "*"
-    }
-  ]
-}
-EOF
-}
-
 resource "aws_cloudwatch_log_group" "greeting_log_group" {
   name              = "/aws/lambda/${var.lambda_function_name}"
   retention_in_days = 14
 }
 
-resource "aws_iam_policy" "greeting_logging_policy" {
+resource "aws_iam_policy" "greeting_iam_policy" {
   name        = "greeting_iam_policy"
   path        = "/"
   description = "IAM policy for logging from a lambda"
@@ -107,21 +111,28 @@ resource "aws_iam_policy" "greeting_logging_policy" {
   "Statement": [
     {
       "Action": [
-        "logs:CreateLogGroup",
-        "logs:CreateLogStream",
-        "logs:PutLogEvents"
+        "logs:*"
       ],
-      "Resource": "arn:aws:logs:*:*:*",
+      "Resource": "*",
       "Effect": "Allow"
+    },
+    {
+        "Action": [
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:CreateNetworkInterface",
+          "ec2:DeleteNetworkInterface",
+          "ec2:DescribeInstances",
+          "ec2:AttachNetworkInterface"
+        ],
+        "Effect": "Allow",
+        "Resource": "*"
     }
   ]
 }
 EOF
 }
 
-
-
-resource "aws_iam_role_policy_attachment" "greeting_lambda_logs" {
+resource "aws_iam_role_policy_attachment" "lambda_iam_role_policy" {
   role       = aws_iam_role.greeting_role.name
   policy_arn = aws_iam_policy.greeting_iam_policy.arn
 }
@@ -142,8 +153,9 @@ resource "aws_lambda_function" "greeting" {
   }
 
   depends_on = [
-    aws_iam_role_policy_attachment.greeting_lambda_logs,
+    aws_iam_role_policy_attachment.lambda_iam_role_policy,
     aws_cloudwatch_log_group.greeting_log_group,
+    aws_main_route_table_association.set-lambda-default-rt-assoc
   ]
 
   vpc_config {

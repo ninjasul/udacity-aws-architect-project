@@ -13,10 +13,9 @@ variable "lambda_function_name" {
   default = "greeting"
 }
 
-data "archive_file" "greeting" {
-  type        = "zip"
-  source_file = "lambda.py"
-  output_path = var.output_path
+variable "output_path" {
+  type    = string
+  default = "outputs/greeting_lambda.zip"
 }
 
 
