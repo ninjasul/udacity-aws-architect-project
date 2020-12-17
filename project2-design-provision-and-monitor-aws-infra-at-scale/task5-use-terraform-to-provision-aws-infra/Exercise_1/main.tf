@@ -20,16 +20,16 @@ data "aws_ssm_parameter" "linuxAmi" {
   name     = "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
 }
 
-variable "instance-type-t3-micro" {
+variable "instance-type-t2-micro" {
   type    = string
-  default = "t3.micro"
+  default = "t2.micro"
 }
 
 resource "aws_instance" "UdacityT2" {
   count         = 4
   provider      = aws.default-provider
   ami           = data.aws_ssm_parameter.linuxAmi.value
-  instance_type = var.instance-type-t3-micro
+  instance_type = var.instance-type-t2-micro
   key_name      = aws_key_pair.my-key.key_name
   tags = {
     Name = "UdacityT2-${count.index + 1}"
