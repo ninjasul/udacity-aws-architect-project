@@ -1,10 +1,5 @@
 # TODO: Define the variable for aws_region
-variable "profile" {
-  type    = string
-  default = "default"
-}
-
-variable "region_lambda" {
+variable "region" {
   type    = string
   default = "ap-northeast-2"
 }
