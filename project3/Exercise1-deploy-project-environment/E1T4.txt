@@ -1,0 +1,10 @@
+Based on the architecture diagram, and the steps you have taken so far to upload data and access the application web service,
+identify at least 2 obvious poor practices as it relates to security.  Include justification.
+
+
+1. The security group of Web Service Instance allows all traffics from all ports. This rule should be removed.
+
+2. Web Service Instance should not be in a public subnet. It should be moved to a private subnet.
+
+3. All S3 Buckets allows public access and their data is not encrypted. All public access should be blocked and access to the buckets for secret recipes should be allowed for business users.
+
